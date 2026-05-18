@@ -97,5 +97,10 @@
 
   body {
     @apply bg-background text-foreground;
+    background: #1a0a2e;
+  }
+
+  * {
+    image-rendering: pixelated;
   }
 }
