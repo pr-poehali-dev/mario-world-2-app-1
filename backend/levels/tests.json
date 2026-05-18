@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "GET list levels",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": { "levels": [] },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST save level",
+      "method": "POST",
+      "path": "/",
+      "body": { "name": "Тест уровень", "author": "Тестер", "grid": [], "width": 20, "height": 12 },
+      "expectedStatus": 201,
+      "expectedBody": { "message": "Уровень сохранён!" },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

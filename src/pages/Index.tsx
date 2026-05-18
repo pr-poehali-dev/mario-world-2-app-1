@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import LevelEditor from "@/components/LevelEditor";
 
 type Tab = "home" | "levels" | "leaderboard" | "shop";
 
@@ -78,6 +79,7 @@ export default function Index() {
   const [purchasedItems, setPurchasedItems] = useState<number[]>([]);
   const [blink, setBlink] = useState(true);
   const [shopFilter, setShopFilter] = useState<string>("all");
+  const [showEditor, setShowEditor] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setBlink(b => !b), 600);
@@ -97,6 +99,7 @@ export default function Index() {
 
   return (
     <div style={px({ minHeight: "100vh", color: "#fff", position: "relative", overflow: "hidden", background: "linear-gradient(180deg,#1a0a2e 0%,#16213e 40%,#0f3460 100%)", fontFamily: "'Press Start 2P',monospace", imageRendering: "pixelated" })}>
+      {showEditor && <LevelEditor onClose={() => setShowEditor(false)} />}
       <FloatingCoins />
 
       {/* Scanlines */}
@@ -131,6 +134,9 @@ export default function Index() {
               {t.emoji} {t.label}
             </button>
           ))}
+          <button onClick={() => setShowEditor(true)} style={{ background: "#1a0a2e", border: "3px solid #ffd700", boxShadow: "3px 3px 0 #ffd700", color: "#ffd700", padding: "8px 12px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace", fontSize: "8px", animation: "bossPulse 2s ease-in-out infinite" }}>
+            🏗️ РЕДАКТОР
+          </button>
         </nav>
 
         {/* ═══════════ HOME ═══════════ */}
@@ -309,6 +315,10 @@ export default function Index() {
             <span style={{ fontSize: "5px", fontFamily: "'Press Start 2P',monospace", color: tab === t.id ? "#ffd700" : "#555" }}>{t.label}</span>
           </button>
         ))}
+        <button onClick={() => setShowEditor(true)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", padding: "4px 10px" }}>
+          <span style={{ fontSize: "20px" }}>🏗️</span>
+          <span style={{ fontSize: "5px", fontFamily: "'Press Start 2P',monospace", color: "#ffd700" }}>РЕДАКТОР</span>
+        </button>
       </div>
 
       <style>{`
