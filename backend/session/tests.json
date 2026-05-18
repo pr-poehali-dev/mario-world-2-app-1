@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "name": "GET room players",
+      "method": "GET",
+      "path": "/",
+      "queryStringParameters": { "room_id": "test" },
+      "expectedStatus": 200,
+      "expectedBody": { "players": [] },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST join room",
+      "method": "POST",
+      "path": "/",
+      "body": { "action": "join", "room_id": "test", "player_id": "p1", "name": "Тест", "skin": "🍄" },
+      "expectedStatus": 200,
+      "expectedBody": { "ok": true },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

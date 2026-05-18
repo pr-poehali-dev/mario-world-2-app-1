@@ -1,7 +1,58 @@
 import { useState, useEffect } from "react";
 import LevelEditor from "@/components/LevelEditor";
+import GameEngine from "@/components/GameEngine";
+import GameLobby from "@/components/GameLobby";
 
 type Tab = "home" | "levels" | "leaderboard" | "shop";
+
+// ── Procedural level gen (mirrors LevelEditor's generateLevel) ────────────────
+type TileId = 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19;
+const W = 20, H = 12;
+function emptyGrid(): TileId[][] { return Array.from({length: H}, () => Array(W).fill(0) as TileId[]); }
+function genLevel(preset: string): TileId[][] {
+  const g = emptyGrid();
+  const fill = (r: number, c: number, t: TileId) => { if (r>=0&&r<H&&c>=0&&c<W) g[r][c]=t; };
+  if (preset === "plains") {
+    for (let c=0;c<W;c++) { g[H-1][c]=1; g[H-2][c]=2; }
+    [[2,5,4],[2,10,4],[4,7,3],[4,13,3]].forEach(([r,c,l])=>{for(let i=0;i<l;i++)fill(r,c+i,3);});
+    fill(3,6,4);fill(3,11,4);fill(1,9,4);
+    fill(H-3,7,7);fill(H-3,12,8);fill(H-3,16,7);
+    [9,10,11].forEach(c=>fill(2,c,13));
+    fill(H-3,0,12);fill(H-3,W-1,11);
+  } else if (preset === "cave") {
+    for (let r=0;r<H;r++){fill(r,0,5);fill(r,W-1,5);}
+    for (let c=0;c<W;c++){fill(0,c,5);fill(H-1,c,5);}
+    for (let c=1;c<W-1;c++) fill(H-2,c,1);
+    for (const c of [2,5,9,13,17]){fill(1,c,5);fill(2,c,5);}
+    for (let c=6;c<=9;c++) fill(H-2,c,15);
+    for (let c=13;c<=15;c++) fill(H-2,c,15);
+    [[3,3,3],[3,10,3],[5,6,4],[7,2,3],[7,13,3]].forEach(([r,c,l])=>{for(let i=0;i<l;i++)fill(r,c+i,1);});
+    fill(H-3,4,9);fill(H-3,11,18);[3,4,10,11].forEach(c=>fill(4,c,13));
+    fill(H-3,0,12);fill(H-3,W-2,11);
+  } else if (preset === "volcano") {
+    for (let c=0;c<W;c++){fill(H-1,c,15);fill(H-2,c,1);}
+    for (const c of [5,6,12,13]) fill(H-2,c,15);
+    for (let r=H-6;r<H-2;r++) for(let c=W-4;c<W;c++) fill(r,c,3);
+    fill(H-7,W-3,16);[4,8,15].forEach(c=>{fill(H-3,c,15);fill(H-4,c,15);});
+    [[4,2,3],[4,8,3],[6,5,3],[6,11,3],[2,7,4]].forEach(([r,c,l])=>{for(let i=0;i<l;i++)fill(r,c+i,5);});
+    fill(H-3,3,18);fill(H-3,10,18);fill(5,6,7);[7,8,9,10].forEach(c=>fill(3,c,13));
+    fill(H-3,0,12);fill(H-7,W-3,11);
+  } else if (preset === "sky") {
+    [[1,2,4],[1,9,4],[1,16,3],[3,0,3],[3,6,5],[3,13,4],[5,3,3],[5,10,4],[5,17,2],[7,1,4],[7,8,3],[7,14,4],[9,4,4],[9,11,3]].forEach(([r,c,l])=>{for(let i=0;i<l;i++)fill(r,c+i,5);});
+    for (let c=3;c<10;c++) fill(0,c,19);fill(2,4,4);fill(2,11,4);fill(6,12,4);
+    [1,6,14,18].forEach(c=>fill(0,c,10));fill(4,7,9);fill(8,9,7);[3,4,5,12,13].forEach(c=>fill(6,c,13));
+    fill(2,3,12);fill(8,W-2,11);
+  } else {
+    for (let c=0;c<W;c++) fill(H-1,c,3);
+    for (let r=0;r<H;r++){fill(r,0,16);fill(r,W-1,16);}
+    for (let c=1;c<W-1;c++){fill(0,c,3);fill(4,c,3);fill(8,c,3);}
+    [5,6,13,14].forEach(c=>{g[4][c]=0;g[8][c]=0;});
+    for (let c=3;c<17;c++) fill(H-2,c,15);
+    fill(3,8,18);fill(3,11,18);fill(7,5,9);fill(7,14,9);[4,5,10,15,16].forEach(c=>fill(3,c,13));
+    fill(H-2,1,12);fill(1,W-2,11);
+  }
+  return g;
+}
 
 const ENEMIES = [
   { id: 1, name: "Гумба", emoji: "🍄", hp: 10, atk: 5, color: "#c0392b", desc: "Базовый враг. Медленный, но стойкий." },
@@ -80,6 +131,15 @@ export default function Index() {
   const [blink, setBlink] = useState(true);
   const [shopFilter, setShopFilter] = useState<string>("all");
   const [showEditor, setShowEditor] = useState(false);
+  const [showLobby, setShowLobby]   = useState(false);
+  const [gameState, setGameState]   = useState<{
+    grid: TileId[][];
+    lbpMode: boolean;
+    roomId: string;
+    skin: string;
+    name: string;
+    preset: string;
+  } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setBlink(b => !b), 600);
@@ -95,11 +155,32 @@ export default function Index() {
 
   const filteredShop = shopFilter === "all" ? SHOP_ITEMS : SHOP_ITEMS.filter(i => i.type === shopFilter);
 
+  const handleLobbyStart = (opts: { lbpMode: boolean; roomId: string; skin: string; name: string; levelPreset: string }) => {
+    const grid = genLevel(opts.levelPreset);
+    setGameState({ grid, lbpMode: opts.lbpMode, roomId: opts.roomId, skin: opts.skin, name: opts.name, preset: opts.levelPreset });
+    setShowLobby(false);
+  };
+
   const px = (obj: React.CSSProperties) => obj;
 
   return (
     <div style={px({ minHeight: "100vh", color: "#fff", position: "relative", overflow: "hidden", background: "linear-gradient(180deg,#1a0a2e 0%,#16213e 40%,#0f3460 100%)", fontFamily: "'Press Start 2P',monospace", imageRendering: "pixelated" })}>
       {showEditor && <LevelEditor onClose={() => setShowEditor(false)} />}
+      {showLobby && !gameState && (
+        <GameLobby onStart={handleLobbyStart} onClose={() => setShowLobby(false)} />
+      )}
+      {gameState && (
+        <GameEngine
+          grid={gameState.grid}
+          levelName={`${gameState.preset.toUpperCase()} — ${gameState.lbpMode ? "LBP2 MODE" : "MARIO MODE"}`}
+          lbpMode={gameState.lbpMode}
+          roomId={gameState.roomId || undefined}
+          playerName={gameState.name}
+          playerSkin={gameState.skin}
+          onExit={() => setGameState(null)}
+          onWin={(c) => setCoins(prev => prev + c * 10)}
+        />
+      )}
       <FloatingCoins />
 
       {/* Scanlines */}
@@ -154,11 +235,16 @@ export default function Index() {
                 БОУЗЕР ПОХИТИЛ ЕЁ СНОВА...<br />
                 ТЫ ЕДИНСТВЕННАЯ НАДЕЖДА!
               </div>
-              <button onClick={() => setTab("levels")} style={{ background: "#e74c3c", border: "4px solid #ffd700", boxShadow: "4px 4px 0 #000", color: "#ffd700", padding: "12px 32px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace", fontSize: "11px", transition: "transform 0.1s" }}
-                onMouseDown={e => (e.currentTarget.style.transform = "translateY(2px)")}
-                onMouseUp={e => (e.currentTarget.style.transform = "none")}>
-                ▶ ИГРАТЬ
-              </button>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                <button onClick={() => setShowLobby(true)} style={{ background: "#e74c3c", border: "4px solid #ffd700", boxShadow: "4px 4px 0 #000", color: "#ffd700", padding: "12px 24px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace", fontSize: "11px", transition: "transform 0.1s" }}
+                  onMouseDown={e => (e.currentTarget.style.transform = "translateY(2px)")}
+                  onMouseUp={e => (e.currentTarget.style.transform = "none")}>
+                  ▶ ИГРАТЬ
+                </button>
+                <button onClick={() => { handleLobbyStart({ lbpMode: true, roomId: "", skin: "🧶", name: "Сакбой", levelPreset: "plains" }); }} style={{ background: "#8B6914", border: "4px solid #ffd700", boxShadow: "4px 4px 0 #000", color: "#ffd700", padding: "12px 20px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace", fontSize: "9px" }}>
+                  🧶 LBP2
+                </button>
+              </div>
             </div>
 
             {/* Enemies */}
@@ -214,7 +300,8 @@ export default function Index() {
                       </div>
                     </div>
                     {level.unlocked ? (
-                      <button style={{ background: "#e74c3c", border: "2px solid #ffd700", boxShadow: "2px 2px 0 #000", color: "#ffd700", padding: "6px 10px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace" }}>▶</button>
+                      <button onClick={() => handleLobbyStart({ lbpMode: false, roomId: "", skin: "🍄", name: "Игрок", levelPreset: ["plains","cave","sky","volcano","sky","castle"][level.id - 1] || "plains" })}
+                        style={{ background: "#e74c3c", border: "2px solid #ffd700", boxShadow: "2px 2px 0 #000", color: "#ffd700", padding: "6px 10px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace" }}>▶</button>
                     ) : (
                       <span style={{ fontSize: "20px" }}>🔒</span>
                     )}
@@ -315,6 +402,10 @@ export default function Index() {
             <span style={{ fontSize: "5px", fontFamily: "'Press Start 2P',monospace", color: tab === t.id ? "#ffd700" : "#555" }}>{t.label}</span>
           </button>
         ))}
+        <button onClick={() => setShowLobby(true)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", padding: "4px 10px" }}>
+          <span style={{ fontSize: "20px" }}>▶️</span>
+          <span style={{ fontSize: "5px", fontFamily: "'Press Start 2P',monospace", color: "#e74c3c" }}>ИГРАТЬ</span>
+        </button>
         <button onClick={() => setShowEditor(true)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", padding: "4px 10px" }}>
           <span style={{ fontSize: "20px" }}>🏗️</span>
           <span style={{ fontSize: "5px", fontFamily: "'Press Start 2P',monospace", color: "#ffd700" }}>РЕДАКТОР</span>
