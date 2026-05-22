@@ -127,6 +127,8 @@ export default function GameEngine({
   const animFrameRef  = useRef(0);
   const tickRef       = useRef(0);
   const spawnPosRef   = useRef<Vec2>({ x: TILE, y: TILE });
+  const tickFnRef     = useRef<() => void>(() => {});
+  const drawFnRef     = useRef<() => void>(() => {});
 
   const [overlayMsg, setOverlayMsg] = useState<string | null>(null);
   const [hudHp, setHudHp]           = useState(3);
@@ -332,6 +334,9 @@ export default function GameEngine({
     }
   }, [cols, rows, grid, findStart, onWin]);
 
+  // keep tickFnRef current so the loop never needs tick as a dependency
+  useEffect(() => { tickFnRef.current = tick; });
+
   // ── Draw ───────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -507,6 +512,9 @@ export default function GameEngine({
     ctx.restore();
   }, [grid, lbpMode, playerSkin, cols, rows]);
 
+  // keep drawFnRef current
+  useEffect(() => { drawFnRef.current = draw; });
+
   // ── Game loop ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const sp = findStart();
@@ -525,13 +533,13 @@ export default function GameEngine({
     const loop = () => {
       if (!running) return;
       tickRef.current++;
-      tick();
-      draw();
+      tickFnRef.current();
+      drawFnRef.current();
       animFrameRef.current = requestAnimationFrame(loop);
     };
     animFrameRef.current = requestAnimationFrame(loop);
     return () => { running = false; cancelAnimationFrame(animFrameRef.current); };
-  }, [grid, tick, draw, findStart, initEnemies]);
+  }, [grid, findStart, initEnemies]); // tick/draw убраны — они обновляются через рефы
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
   useEffect(() => {
