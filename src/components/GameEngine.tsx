@@ -117,15 +117,16 @@ export default function GameEngine({
     coins: 0,
     iFrames: 0,
   });
-  const keysRef      = useRef<Set<string>>(new Set());
-  const camRef       = useRef<Vec2>({ x: 0, y: 0 });
-  const enemiesRef   = useRef<Enemy[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
-  const remotesRef   = useRef<RemotePlayer[]>([]);
-  const frameRef     = useRef(0);
-  const pidRef       = useRef(`p_${Math.random().toString(36).slice(2, 8)}`);
-  const animFrameRef = useRef(0);
-  const tickRef      = useRef(0);
+  const keysRef       = useRef<Set<string>>(new Set());
+  const camRef        = useRef<Vec2>({ x: 0, y: 0 });
+  const enemiesRef    = useRef<Enemy[]>([]);
+  const particlesRef  = useRef<Particle[]>([]);
+  const remotesRef    = useRef<RemotePlayer[]>([]);
+  const frameRef      = useRef(0);
+  const pidRef        = useRef(`p_${Math.random().toString(36).slice(2, 8)}`);
+  const animFrameRef  = useRef(0);
+  const tickRef       = useRef(0);
+  const spawnPosRef   = useRef<Vec2>({ x: TILE, y: TILE });
 
   const [overlayMsg, setOverlayMsg] = useState<string | null>(null);
   const [hudHp, setHudHp]           = useState(3);
@@ -248,9 +249,9 @@ export default function GameEngine({
       s.hp--;
       setHudHp(s.hp);
       if (s.hp <= 0) { s.anim = "dead"; setOverlayMsg("💀 ГЕМ ОВЕР"); return; }
-      const sp = findStart();
+      const sp = spawnPosRef.current;
       s.pos.x = sp.x; s.pos.y = sp.y; s.vel.x = 0; s.vel.y = 0;
-      spawnParticles(s.pos.x, s.pos.y, "💔", "#e74c3c", 4);
+      spawnParticles(sp.x, sp.y, "💔", "#e74c3c", 4);
       return;
     }
 
@@ -509,7 +510,9 @@ export default function GameEngine({
   // ── Game loop ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const sp = findStart();
+    spawnPosRef.current = { ...sp };
     stateRef.current.pos = { ...sp };
+    stateRef.current.vel = { x: 0, y: 0 };
     stateRef.current.hp    = 3;
     stateRef.current.coins = 0;
     stateRef.current.anim  = "idle";
@@ -625,7 +628,7 @@ export default function GameEngine({
   );
 
   const restartGame = () => {
-    const sp = findStart();
+    const sp = spawnPosRef.current;
     stateRef.current = {
       pos: { ...sp }, vel: { x: 0, y: 0 },
       onGround: false, facing: 1, anim: "idle",
