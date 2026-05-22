@@ -173,8 +173,26 @@ interface SavedLevel {
   grid?: TileId[][];
 }
 
+// ── Object properties ─────────────────────────────────────────────────────────
+// Тайлы, у которых есть настраиваемые свойства
+const PROP_TILES: Record<number, { label: string; fields: { key: string; label: string; min: number; max: number; step: number; unit: string; default: number }[] }> = {
+  7:  { label: "Гумба 🍄",    fields: [{ key: "speed", label: "Скорость", min: 0.5, max: 4, step: 0.5, unit: "×", default: 1 }] },
+  8:  { label: "Черепаха 🐢", fields: [{ key: "speed", label: "Скорость", min: 0.5, max: 4, step: 0.5, unit: "×", default: 1.5 }] },
+  18: { label: "Боб-омб 💣",  fields: [{ key: "speed", label: "Скорость", min: 0.5, max: 4, step: 0.5, unit: "×", default: 1 }] },
+  10: { label: "Звезда ⭐",   fields: [{ key: "value", label: "Ценность", min: 1, max: 10, step: 1, unit: "монет", default: 1 }] },
+  13: { label: "Монета 💰",   fields: [{ key: "value", label: "Ценность", min: 1, max: 10, step: 1, unit: "монет", default: 1 }] },
+  4:  { label: "?-блок ❓",   fields: [{ key: "value", label: "Монет внутри", min: 1, max: 10, step: 1, unit: "шт", default: 1 }] },
+};
+
+// Тайлы, которые должны быть уникальными (только один на карте)
+const UNIQUE_TILES = new Set([11, 12]);
+
+// ── ObjectProps: key = "row_col", value = { speed, value, … } ────────────────
+type ObjProps = Record<string, Record<string, number>>;
+
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function LevelEditor({ onClose }: { onClose: () => void }) {
+export type { ObjProps };
+export default function LevelEditor({ onClose, onPlay }: { onClose: () => void; onPlay?: (grid: TileId[][], props: ObjProps) => void }) {
   const [grid, setGrid] = useState<TileId[][]>(emptyGrid);
   const [selectedTile, setSelectedTile] = useState<TileId>(2);
   const [isPainting, setIsPainting] = useState(false);
@@ -187,16 +205,44 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<"edit" | "online">("edit");
   const [previewLevel, setPreviewLevel] = useState<SavedLevel | null>(null);
   const [previewGrid, setPreviewGrid] = useState<TileId[][] | null>(null);
+  const [objectProps, setObjectProps] = useState<ObjProps>({});
+  const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
 
   const tileRef = useRef(selectedTile);
   tileRef.current = selectedTile;
 
+  const getProps = (r: number, c: number, tileId: number): Record<string, number> => {
+    const key = `${r}_${c}`;
+    const saved = objectProps[key];
+    const def = PROP_TILES[tileId]?.fields.reduce((acc, f) => ({ ...acc, [f.key]: f.default }), {} as Record<string, number>);
+    return saved ?? def ?? {};
+  };
+
+  const setProps = (r: number, c: number, props: Record<string, number>) => {
+    setObjectProps(prev => ({ ...prev, [`${r}_${c}`]: props }));
+  };
+
   const paint = useCallback((r: number, c: number) => {
+    const tileId = tileRef.current;
     setGrid(g => {
       const ng = g.map(row => [...row]);
-      ng[r][c] = tileRef.current;
+      // Уникальные тайлы (старт/финиш) — очищаем предыдущее место
+      if (UNIQUE_TILES.has(tileId)) {
+        for (let rr = 0; rr < ng.length; rr++) {
+          for (let cc = 0; cc < ng[rr].length; cc++) {
+            if (ng[rr][cc] === tileId) ng[rr][cc] = 0;
+          }
+        }
+      }
+      ng[r][c] = tileId;
       return ng;
     });
+    // Выделяем ячейку если у тайла есть свойства
+    if (PROP_TILES[tileId]) {
+      setSelectedCell({ r, c });
+    } else {
+      setSelectedCell(null);
+    }
   }, []);
 
   const loadOnline = async () => {
@@ -222,7 +268,7 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: levelName, author, grid, width: W, height: H }),
+        body: JSON.stringify({ name: levelName, author, grid, width: W, height: H, objectProps }),
       });
       const data = await res.json();
       setSavedMsg(data.message || `ID: ${data.id}`);
@@ -273,6 +319,7 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
         <div style={px({ display: "flex", gap: "8px" })}>
           <button onClick={() => setView("edit")} style={px({ background: view === "edit" ? "#e74c3c" : "#16213e", border: `2px solid ${view === "edit" ? "#ffd700" : "#e74c3c"}`, color: view === "edit" ? "#ffd700" : "#fff", padding: "6px 12px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace" })}>✏️ РЕДАКТОР</button>
           <button onClick={() => setView("online")} style={px({ background: view === "online" ? "#e74c3c" : "#16213e", border: `2px solid ${view === "online" ? "#ffd700" : "#e74c3c"}`, color: view === "online" ? "#ffd700" : "#fff", padding: "6px 12px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace" })}>🌐 ОНЛАЙН</button>
+          {onPlay && <button onClick={() => onPlay(grid, objectProps)} style={px({ background: "#27ae60", border: "2px solid #2ecc71", color: "#fff", padding: "6px 12px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace", boxShadow: "2px 2px 0 #000" })}>▶ ИГРАТЬ</button>}
           <button onClick={onClose} style={px({ background: "#2c3e50", border: "2px solid #7f8c8d", color: "#aaa", padding: "6px 12px", fontSize: "7px", cursor: "pointer", fontFamily: "'Press Start 2P',monospace" })}>✕ ЗАКРЫТЬ</button>
         </div>
       </div>
@@ -319,7 +366,15 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
                   row.map((cell, c) => (
                     <div
                       key={`${r}-${c}`}
-                      onMouseDown={() => { setIsPainting(true); paint(r, c); }}
+                      onMouseDown={() => {
+                        setIsPainting(true);
+                        // Правая кнопка мыши или уже стоит объект — просто выделяем
+                        if (PROP_TILES[cell] && selectedTile === cell) {
+                          setSelectedCell({ r, c });
+                        } else {
+                          paint(r, c);
+                        }
+                      }}
                       onMouseEnter={() => { if (isPainting) paint(r, c); }}
                       onMouseUp={() => setIsPainting(false)}
                       onTouchStart={() => { setIsPainting(true); paint(r, c); }}
@@ -341,8 +396,13 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
                         justifyContent: "center",
                         fontSize: "14px",
                         transition: "transform 0.05s",
-                        border: cell === 0 ? "1px solid #111" : "none",
+                        border: (selectedCell?.r === r && selectedCell?.c === c)
+                          ? "2px solid #2ecc71"
+                          : cell === 0 ? "1px solid #111" : "none",
+                        outline: (selectedCell?.r === r && selectedCell?.c === c)
+                          ? "2px solid #ffd700" : "none",
                         lineHeight: 1,
+                        boxSizing: "border-box",
                       })}
                     >
                       {cell !== 0 ? tileEmoji(cell) : ""}
@@ -353,32 +413,77 @@ export default function LevelEditor({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Palette */}
-            <div style={px({ width: "160px", flexShrink: 0 })}>
-              <div style={px({ fontSize: "7px", color: "#aaa", marginBottom: "8px" })}>ПАЛИТРА ТАЙЛОВ</div>
-              <div style={px({ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" })}>
-                {TILES.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTile(t.id)}
-                    style={px({
-                      background: selectedTile === t.id ? `${t.color}88` : "#16213e",
-                      border: `2px solid ${selectedTile === t.id ? "#ffd700" : t.color}`,
-                      color: "#fff",
-                      padding: "5px 3px",
-                      cursor: "pointer",
-                      fontSize: "8px",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: "2px",
-                      boxShadow: selectedTile === t.id ? "0 0 8px rgba(255,215,0,0.4)" : "none",
-                    })}
-                  >
-                    <span style={{ fontSize: "16px" }}>{t.emoji}</span>
-                    <span style={{ fontSize: "5px", color: "#aaa", lineHeight: 1.2, textAlign: "center" }}>{t.label}</span>
-                  </button>
-                ))}
+            <div style={px({ width: "160px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "12px" })}>
+              <div>
+                <div style={px({ fontSize: "7px", color: "#aaa", marginBottom: "8px" })}>ПАЛИТРА ТАЙЛОВ</div>
+                <div style={px({ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" })}>
+                  {TILES.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedTile(t.id)}
+                      style={px({
+                        background: selectedTile === t.id ? `${t.color}88` : "#16213e",
+                        border: `2px solid ${selectedTile === t.id ? "#ffd700" : t.color}`,
+                        color: "#fff",
+                        padding: "5px 3px",
+                        cursor: "pointer",
+                        fontSize: "8px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "2px",
+                        boxShadow: selectedTile === t.id ? "0 0 8px rgba(255,215,0,0.4)" : "none",
+                        position: "relative",
+                      })}
+                    >
+                      <span style={{ fontSize: "16px" }}>{t.emoji}</span>
+                      <span style={{ fontSize: "5px", color: "#aaa", lineHeight: 1.2, textAlign: "center" }}>{t.label}</span>
+                      {UNIQUE_TILES.has(t.id) && (
+                        <span style={{ position: "absolute", top: 2, right: 2, fontSize: "5px", color: "#ffd700" }}>×1</span>
+                      )}
+                      {PROP_TILES[t.id] && (
+                        <span style={{ position: "absolute", top: 2, left: 2, fontSize: "5px", color: "#2ecc71" }}>⚙</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Object properties panel */}
+              {selectedCell && (() => {
+                const { r, c } = selectedCell;
+                const tileId = grid[r]?.[c];
+                const meta = tileId !== undefined ? PROP_TILES[tileId] : null;
+                if (!meta) return null;
+                const props = getProps(r, c, tileId);
+                return (
+                  <div style={px({ background: "#0d0d1a", border: "2px solid #2ecc71", padding: "10px" })}>
+                    <div style={px({ fontSize: "6px", color: "#2ecc71", marginBottom: "8px" })}>⚙ {meta.label}</div>
+                    <div style={px({ fontSize: "6px", color: "#555", marginBottom: "8px" })}>ряд {r+1}, кол {c+1}</div>
+                    {meta.fields.map(f => (
+                      <div key={f.key} style={px({ marginBottom: "8px" })}>
+                        <div style={px({ fontSize: "6px", color: "#aaa", marginBottom: "4px" })}>{f.label}</div>
+                        <div style={px({ display: "flex", alignItems: "center", gap: "6px" })}>
+                          <input
+                            type="range"
+                            min={f.min} max={f.max} step={f.step}
+                            value={props[f.key] ?? f.default}
+                            onChange={e => setProps(r, c, { ...props, [f.key]: +e.target.value })}
+                            style={{ flex: 1, accentColor: "#2ecc71" }}
+                          />
+                          <span style={{ fontSize: "8px", color: "#ffd700", minWidth: "36px", textAlign: "right" }}>
+                            {props[f.key] ?? f.default}{f.unit}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setSelectedCell(null)}
+                      style={px({ background: "transparent", border: "1px solid #333", color: "#555", fontSize: "6px", cursor: "pointer", padding: "3px 6px", fontFamily: "'Press Start 2P',monospace" })}
+                    >✕ закрыть</button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

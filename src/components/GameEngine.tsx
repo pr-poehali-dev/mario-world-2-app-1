@@ -89,6 +89,8 @@ interface Particle {
   color: string;
 }
 
+type ObjProps = Record<string, Record<string, number>>;
+
 interface Props {
   grid: number[][];
   levelName?: string;
@@ -96,6 +98,7 @@ interface Props {
   roomId?: string;
   playerName?: string;
   playerSkin?: string;
+  objectProps?: ObjProps;
   onExit: () => void;
   onWin?: (coins: number) => void;
 }
@@ -104,6 +107,7 @@ interface Props {
 export default function GameEngine({
   grid, levelName = "Уровень", lbpMode = false,
   roomId, playerName = "Игрок", playerSkin = "🍄",
+  objectProps = {},
   onExit, onWin,
 }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
@@ -140,14 +144,17 @@ export default function GameEngine({
 
   // ── Build enemy list from grid ──────────────────────────────────────────────
   const initEnemies = useCallback(() => {
+    const defaultSpeed: Record<number, number> = { 7: 1, 8: 1.5, 9: 1, 18: 1 };
     const list: Enemy[] = [];
     grid.forEach((row, r) => row.forEach((t, c) => {
       if ([7, 8, 9, 18].includes(t)) {
-        list.push({ id: r * 1000 + c, tileId: t, x: c * TILE, y: r * TILE, vx: t === 8 ? 1.5 : 1, alive: true });
+        const props = objectProps[`${r}_${c}`] ?? {};
+        const speed = (props.speed ?? defaultSpeed[t]) as number;
+        list.push({ id: r * 1000 + c, tileId: t, x: c * TILE, y: r * TILE, vx: speed, alive: true });
       }
     }));
     enemiesRef.current = list;
-  }, [grid]);
+  }, [grid, objectProps]);
 
   // ── Find start position ─────────────────────────────────────────────────────
   const findStart = useCallback((): Vec2 => {
@@ -238,8 +245,11 @@ export default function GameEngine({
         // Bonk Q-block?
         const headTile = tileAt(s.pos.x, ny - 2);
         if (headTile === 4) {
-          spawnParticles(s.pos.x, ny, "🪙", "#ffd700", 3);
-          s.coins++;
+          const qr = Math.floor((ny - 2) / TILE);
+          const qc = Math.floor(s.pos.x / TILE);
+          const qVal = objectProps[`${qr}_${qc}`]?.value ?? 1;
+          spawnParticles(s.pos.x, ny, "🪙", "#ffd700", Math.min(qVal + 2, 8));
+          s.coins += qVal;
           setHudCoins(s.coins);
         }
         s.vel.y = 0;
@@ -271,9 +281,9 @@ export default function GameEngine({
     }
 
     if (COIN_TILE.has(centerTile)) {
-      // consume coin from grid (just visually via collected set — we don't mutate grid)
-      s.coins++; setHudCoins(s.coins);
-      spawnParticles(s.pos.x, s.pos.y, "🪙", "#ffd700", 3);
+      const coinVal = objectProps[`${cy}_${cx}`]?.value ?? 1;
+      s.coins += coinVal; setHudCoins(s.coins);
+      spawnParticles(s.pos.x, s.pos.y, "🪙", "#ffd700", Math.min(coinVal + 2, 8));
     }
 
     if (centerTile === WIN_TILE) {
@@ -332,7 +342,7 @@ export default function GameEngine({
       camRef.current.x = Math.max(0, Math.min(cols * TILE - canvas.width, camRef.current.x));
       camRef.current.y = Math.max(0, Math.min(rows * TILE - canvas.height, camRef.current.y));
     }
-  }, [cols, rows, grid, findStart, onWin]);
+  }, [cols, rows, grid, findStart, onWin, objectProps]);
 
   // keep tickFnRef current so the loop never needs tick as a dependency
   useEffect(() => { tickFnRef.current = tick; });

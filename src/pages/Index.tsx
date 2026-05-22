@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import LevelEditor from "@/components/LevelEditor";
+import LevelEditor, { type ObjProps } from "@/components/LevelEditor";
 import GameEngine from "@/components/GameEngine";
 import GameLobby from "@/components/GameLobby";
 
@@ -139,6 +139,7 @@ export default function Index() {
     skin: string;
     name: string;
     preset: string;
+    objectProps?: ObjProps;
   } | null>(null);
 
   useEffect(() => {
@@ -165,18 +166,27 @@ export default function Index() {
 
   return (
     <div style={px({ minHeight: "100vh", color: "#fff", position: "relative", overflow: "hidden", background: "linear-gradient(180deg,#1a0a2e 0%,#16213e 40%,#0f3460 100%)", fontFamily: "'Press Start 2P',monospace", imageRendering: "pixelated" })}>
-      {showEditor && <LevelEditor onClose={() => setShowEditor(false)} />}
+      {showEditor && (
+        <LevelEditor
+          onClose={() => setShowEditor(false)}
+          onPlay={(grid, objectProps) => {
+            setGameState({ grid, lbpMode: false, roomId: "", skin: "🍄", name: "Игрок", preset: "custom", objectProps });
+            setShowEditor(false);
+          }}
+        />
+      )}
       {showLobby && !gameState && (
         <GameLobby onStart={handleLobbyStart} onClose={() => setShowLobby(false)} />
       )}
       {gameState && (
         <GameEngine
           grid={gameState.grid}
-          levelName={`${gameState.preset.toUpperCase()} — ${gameState.lbpMode ? "LBP2 MODE" : "MARIO MODE"}`}
+          levelName={gameState.preset === "custom" ? "МОЙ УРОВЕНЬ" : `${gameState.preset.toUpperCase()} — ${gameState.lbpMode ? "LBP2 MODE" : "MARIO MODE"}`}
           lbpMode={gameState.lbpMode}
           roomId={gameState.roomId || undefined}
           playerName={gameState.name}
           playerSkin={gameState.skin}
+          objectProps={gameState.objectProps}
           onExit={() => setGameState(null)}
           onWin={(c) => setCoins(prev => prev + c * 10)}
         />
